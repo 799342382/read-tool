@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>终极朗读神器（更多微信：Y613148639391） - v4.8</title>
+  <!-- 升级日志：v4.8 修复朗读无法开始问题，点击朗读支持同步进度条，全面测试通过 -->
+  <style>
+    :root {
+      --bg-color: #eef2f7;
+      --text-color: #333;
+      --panel-bg: #fff;
+      --highlight: yellow;
+    }
+    body.dark {
+      --bg-color: #1e1e1e;
+      --text-color: #eee;
+      --panel-bg: #2c2c2c;
+      --highlight: #444400;
+    }
+    body {
+      font-family: '微软雅黑', sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      padding: 40px;
+    }
+    .container {
+      max-width: 720px;
+      margin: auto;
+      padding: 30px;
+      background: var(--panel-bg);
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    }
+    h2 {
+      margin-bottom: 20px;
+      color: #2196F3;
+    }
+    textarea {
+      width: 100%;
+      padding: 16px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      resize: vertical;
+    }
+    button {
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: #2196F3;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1976D2;
+    }
+    .controls, .options, .file-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+      align-items: center;
+    }
+    select, input[type=range] {
+      padding: 6px;
+      font-size: 14px;
+      border-radius: 6px;
+    }
+    .range-label {
+      min-width: 60px;
+      text-align: center;
+      font-size: 12px;
+    }
+    .progress-bar {
+      width: 100%;
+      background: #ddd;
+      height: 12px;
+      border-radius: 6px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0;
+      background: #4caf50;
+      transition: width 0.1s;
+    }
+    .highlight {
+      background-color: var(--highlight);
+    }
+    .textDisplay {
+      line-height: 1.8;
+      margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .percent-label {
+      text-align: right;
+      font-size: 13px;
+    }
+    .textDisplay span {
+      cursor: pointer;
+      padding: 2px 4px;
+      display: inline-block;
+    }
+    .playing-icon::after {
+      content: "🔊";
+      margin-left: 6px;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.2; }
+      50% { opacity: 1; }
+      100% { opacity: 0.2; }
+    }
+  </style>
+</head>
+<body>
+  <audio id="bgm" loop hidden>
+    <source src="https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3" type="audio/mpeg">
+  </audio>
+  <div class="container">
+    <h2>📚 终极朗读神器 v4.8（更多微信：Y613148639391）</h2>
+    <input type="file" id="fileInput" accept=".txt">
+    <textarea id="textInput" rows="5" placeholder="请输入或导入要朗读的内容"></textarea>
+    <div class="file-buttons">
+      <button onclick="textInput.value='';">🧹 清空</button>
+      <button onclick="navigator.clipboard.writeText(textInput.value)">📋 复制</button>
+      <button onclick="navigator.clipboard.readText().then(t=>textInput.value=t)">📥 粘贴</button>
+      <button onclick="saveTextToFile()">💾 保存</button>
+    </div>
+    <div class="controls">
+      <select id="voiceSelect"></select>
+      <label>语速 <input type="range" id="rateControl" min="0.5" max="2" value="1" step="0.1"><span class="range-label" id="rateLabel">100%</span></label>
+      <label>音调 <input type="range" id="pitchControl" min="0" max="2" value="1" step="0.1"><span class="range-label" id="pitchLabel">100%</span></label>
+    </div>
+    <div class="controls">
+      <label>🎵 音乐音量 <input type="range" id="volumeControl" min="0" max="1" step="0.01" value="0.5"></label>
+    </div>
+    <div class="options">
+      <button id="sampleBtn">📋 插入样例</button>
+      <button id="loopBtn">🔁 循环关闭</button>
+      <button id="darkBtn">🌙 夜间模式</button>
+      <button onclick="toggleBGM()">🎵 音乐</button>
+    </div>
+    <div class="options">
+      <button id="speakBtn">▶️ 开始朗读</button>
+      <button id="pauseBtn">⏸ 暂停</button>
+      <button id="resumeBtn">▶️ 继续</button>
+      <button id="cancelBtn">⏹ 停止</button>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="percent-label" id="progressPercent">朗读进度：0%</div>
+    <div class="textDisplay" id="textDisplay"></div>
+  </div>
+  <script>
+    const synth = window.speechSynthesis;
+    const textInput = document.getElementById("textInput");
+    const voiceSelect = document.getElementById("voiceSelect");
+    const rateControl = document.getElementById("rateControl");
+    const pitchControl = document.getElementById("pitchControl");
+    const progressFill = document.getElementById("progressFill");
+    const progressPercent = document.getElementById("progressPercent");
+    const textDisplay = document.getElementById("textDisplay");
+    const loopBtn = document.getElementById("loopBtn");
+    const bgm = document.getElementById("bgm");
+    const volumeControl = document.getElementById("volumeControl");
+    const rateLabel = document.getElementById("rateLabel");
+    const pitchLabel = document.getElementById("pitchLabel");
+
+    let isLooping = false;
+    let current = 0;
+    let chunks = [];
+
+    function populateVoices() {
+      voiceSelect.innerHTML = "";
+      synth.getVoices().forEach(voice => {
+        const option = document.createElement("option");
+        option.textContent = `${voice.name} (${voice.lang})`;
+        option.value = voice.name;
+        voiceSelect.appendChild(option);
+      });
+    }
+    populateVoices();
+    speechSynthesis.onvoiceschanged = populateVoices;
+
+    function splitText(text) {
+      return text.match(/[^。！？]+[。！？]?/g) || [];
+    }
+
+    function highlightCurrent(index) {
+      textDisplay.innerHTML = chunks.map((chunk, i) => `<span class='${i === index ? "highlight" : ""}' data-index='${i}'>${chunk}</span>`).join("");
+      const span = document.querySelector(`span[data-index='${index}']`);
+      if (span) span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function speakAt(index) {
+      if (index >= chunks.length) return;
+      synth.cancel();
+      highlightCurrent(index);
+      const utter = new SpeechSynthesisUtterance(chunks[index]);
+      utter.rate = parseFloat(rateControl.value);
+      utter.pitch = parseFloat(pitchControl.value);
+      utter.voice = synth.getVoices().find(v => v.name === voiceSelect.value);
+      utter.onend = () => {
+        const pct = ((index + 1) / chunks.length) * 100;
+        progressFill.style.width = pct + "%";
+        progressPercent.textContent = `朗读进度：${pct.toFixed(0)}%`;
+        if (!isLooping && index + 1 >= chunks.length) return;
+        current = (index + 1) % chunks.length;
+        speakAt(current);
+      };
+      synth.speak(utter);
+    }
+
+    document.getElementById("speakBtn").onclick = () => {
+      const text = textInput.value;
+      if (!text) return alert("请输入内容");
+      chunks = splitText(text);
+      current = 0;
+      highlightCurrent(current);
+      speakAt(current);
+    };
+
+    document.getElementById("pauseBtn").onclick = () => synth.pause();
+    document.getElementById("resumeBtn").onclick = () => synth.resume();
+    document.getElementById("cancelBtn").onclick = () => {
+      synth.cancel();
+      progressFill.style.width = "0%";
+      progressPercent.textContent = "朗读进度：0%";
+    };
+
+    document.getElementById("sampleBtn").onclick = () => {
+      textInput.value = "你好，欢迎使用终极朗读神器。点击任意句子，即可朗读！";
+    };
+
+    document.getElementById("darkBtn").onclick = () => {
+      document.body.classList.toggle("dark");
+    };
+
+    loopBtn.onclick = () => {
+      isLooping = !isLooping;
+      loopBtn.textContent = isLooping ? "🔁 循环开启" : "🔁 循环关闭";
+    };
+
+    document.getElementById("fileInput").addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (file && file.name.endsWith(".txt")) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          textInput.value = e.target.result;
+        }
+        reader.readAsText(file);
+      } else {
+        alert("请上传txt格式的文本文档。");
+      }
+    });
+
+    function saveTextToFile() {
+      const blob = new Blob([textInput.value], { type: 'text/plain' });
+      const link = document.createElement("a");
+      link.download = "朗读内容.txt";
+      link.href = URL.createObjectURL(blob);
+      link.click();
+    }
+
+    document.getElementById("textDisplay").addEventListener("click", e => {
+      if (e.target.tagName === "SPAN" && e.target.dataset.index !== undefined) {
+        current = parseInt(e.target.dataset.index);
+        speakAt(current);
+      }
+    });
+
+    volumeControl.addEventListener("input", () => {
+      bgm.volume = parseFloat(volumeControl.value);
+    });
+
+    function toggleBGM() {
+      if (bgm.paused) bgm.play();
+      else bgm.pause();
+    }
+
+    rateControl.addEventListener("input", () => {
+      rateLabel.textContent = `${Math.round(rateControl.value * 100)}%`;
+    });
+
+    pitchControl.addEventListener("input", () => {
+      pitchLabel.textContent = `${Math.round(pitchControl.value * 100)}%`;
+    });
+  </script>
+</body>
+</html>
